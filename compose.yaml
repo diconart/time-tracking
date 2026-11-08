@@ -1,0 +1,10 @@
+services:
+  worktime:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - worktime_data:/app/data
+    restart: unless-stopped
+volumes:
+  worktime_data:

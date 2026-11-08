@@ -1,0 +1,7 @@
+target
+.git
+.idea
+.vscode
+data/*.mv.db
+data/*.trace.db
+*.zip

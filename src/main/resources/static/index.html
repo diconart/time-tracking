@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#11223c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="icon" href="/icons/icon-192.png">
+  <title>Worktime Tracker</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-icon" aria-hidden="true">◷</span> worktime<span class="brand-dot">.</span></div>
+      <nav aria-label="Workspace">
+        <a class="side-link" href="#users">Users</a>
+        <a class="side-link" href="#projects">Projects</a>
+        <a class="side-link" href="#reports">Reports</a>
+      </nav>
+    </aside>
+    <main class="main">
+      <header class="topbar workspace-toolbar">
+        <div id="running-timer" class="running-timer" hidden>
+          <strong id="timer-label"></strong>
+          <span id="timer-clock" class="timer-readout"></span>
+          <button id="stop-timer" class="button stop" type="button">■ Stop</button>
+        </div>
+        <span id="timer-idle">No active timer</span>
+        <div class="topbar-actions">
+          <span id="connection" class="connection" role="status">Connecting…</span>
+          <button id="install-app" class="button install-app" type="button" hidden>Install app</button>
+        </div>
+      </header>
+      <div class="content">
+        <p id="notice" class="notice" role="status" hidden></p>
+        <div id="page"></div>
+      </div>
+    </main>
+  </div>
+  <dialog id="create-dialog">
+    <form id="create-form">
+      <h2 id="dialog-title"></h2>
+      <label id="dialog-label" for="dialog-input"></label>
+      <input id="dialog-input" required autofocus>
+      <div id="estimate-field" hidden>
+        <label for="dialog-estimate">Estimated time (minutes)</label>
+        <input id="dialog-estimate" type="number" min="0" max="525600" step="1" value="0">
+      </div>
+      <p id="dialog-error" role="alert" hidden></p>
+      <div class="dialog-actions">
+        <button id="cancel-dialog" type="button" class="button outline">Cancel</button>
+        <button type="submit" class="button primary">Create</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>

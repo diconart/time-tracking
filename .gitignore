@@ -1,0 +1,10 @@
+/target/
+/data/*
+!/data/.gitkeep
+*.mv.db
+*.trace.db
+*.log
+.idea/
+.vscode/
+*.iml
+.DS_Store
