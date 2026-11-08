@@ -7,9 +7,9 @@ A small **installable, responsive employee time-tracking app** developed for an 
 ## Features
 
 - **Users** lists users, creates them in a dialog and links to a separate edit page with session counts and durations grouped by project and local start month.
-- **Projects** lists projects, task counts, estimated time, executed time, and Working or Idle status. The project detail shows the same totals and lets you create tasks with an estimate in minutes. Executed time sums saved work sessions and includes elapsed time for a running session. Project timers run as user **#1**.
+- **Projects** lists projects, task counts, estimated time, executed time, and Working or Idle status. The project detail shows the same totals and lets you create tasks with an estimate in minutes. Executed time sums saved work sessions and includes elapsed time for running sessions. Project timers belong to the user selected in the toolbar.
 - The toolbar shows the active project, task, elapsed time and server connection status. Starting a task creates a new session in H2 before it appears in the toolbar. The browser keeps the session ID and start time in local storage.
-- **Reports** lists sessions with user, project, status and local start-date filters. Export Excel downloads the displayed selection in its current sort order. Older sessions without a task appear as **Unassigned**.
+- **Reports** lists sessions with user, project, status and local start-date filters. It shows the total duration and a breakdown by user across all filtered pages. Export Excel downloads the checked sessions that match the current filters, in sort order. Older sessions without a task appear as **Unassigned**.
 - Install as a **PWA** on compatible Android/desktop browsers, or add it to the iPhone Home Screen through Safari. Responsive UI with a standalone icon and an offline explanation page.
 - No authentication, external APIs, or real employee records: this is intentionally a small demo.
 
@@ -115,9 +115,9 @@ Key scenarios in `src/test/java/md/dipro/worktime/`:
 | `GET, POST` | `/api/projects` | List project summaries or create a project. |
 | `GET` | `/api/projects/{id}` | Read a project and its tasks. |
 | `POST` | `/api/projects/{id}/tasks` | Add a task with a description. |
-| `POST` | `/api/tasks/{id}/sessions` | Create a work session as user #1. |
-| `GET` | `/api/sessions/active` | Read the active session for user #1. |
-| `POST` | `/api/sessions/{id}/stop` | Stop by session ID. Repeating the request returns the saved result. |
+| `POST` | `/api/tasks/{id}/sessions` | Create a work session for `userId`, which defaults to 1. |
+| `GET` | `/api/sessions/active` | Read the active session for `userId`, which defaults to 1. |
+| `POST` | `/api/sessions/{id}/stop` | Stop a session belonging to `userId`, which defaults to 1. Repeating the request returns the saved result. |
 | `GET` | `/api/sessions` | List work sessions, optionally filtered by `userId`. |
 | `POST` | `/api/sessions/export` | Export an ordered JSON array of session IDs as an Excel workbook. |
 | `GET` | `/api/employees/{id}/timer` | Active timer or `{ "running": false, "entry": null }`. |

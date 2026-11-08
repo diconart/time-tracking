@@ -26,7 +26,6 @@ import java.util.Map;
 
 @Service
 public class WorktimeService {
-    private static final long TRACKING_USER_ID = 1;
     private final EmployeeRepository employees;
     private final TimeEntryRepository entries;
     private final ProjectRepository projects;
@@ -68,14 +67,14 @@ public class WorktimeService {
         return projects.findAllByOrderByIdAsc().stream().map(project -> {
             var detail = detail(project, tasksByProject.getOrDefault(project.getId(), List.of()));
             return new ApiDtos.ProjectView(detail.id(), detail.name(), detail.tasks().size(),
-                    detail.estimatedMinutes(), detail.executedSeconds(), detail.working());
+                    detail.estimatedMinutes(), detail.executedSeconds(), detail.working(), detail.runningCount());
         }).toList();
     }
 
     @Transactional
     public ApiDtos.ProjectView addProject(String name) {
         Project project = projects.save(new Project(cleanName(name)));
-        return new ApiDtos.ProjectView(project.getId(), project.getName(), 0, 0, 0, false);
+        return new ApiDtos.ProjectView(project.getId(), project.getName(), 0, 0, 0, false, 0);
     }
 
     @Transactional(readOnly = true)
@@ -87,7 +86,7 @@ public class WorktimeService {
     @Transactional
     public ApiDtos.TaskView addTask(long projectId, String description, int estimatedMinutes) {
         var task = tasks.save(new ProjectTask(requireProject(projectId), cleanDescription(description), estimatedMinutes));
-        return new ApiDtos.TaskView(task.getId(), task.getDescription(), estimatedMinutes, 0, false);
+        return new ApiDtos.TaskView(task.getId(), task.getDescription(), estimatedMinutes, 0, false, 0);
     }
 
     private Map<Long, List<ApiDtos.TaskView>> projectTasks() {
@@ -96,44 +95,46 @@ public class WorktimeService {
         var byProject = new HashMap<Long, List<ApiDtos.TaskView>>();
         for (ProjectTask task : tasks.findAllByOrderByIdAsc()) {
             var timing = timings.get(task.getId());
+            long runningCount = timing == null ? 0 : timing.getRunningCount();
             var view = new ApiDtos.TaskView(task.getId(), task.getDescription(), task.getEstimatedMinutes(),
                     timing == null ? 0 : timing.getElapsedMillis() / 1000.0,
-                    timing != null && timing.getRunningCount() > 0);
+                    runningCount > 0, runningCount);
             byProject.computeIfAbsent(task.getProject().getId(), id -> new ArrayList<>()).add(view);
         }
         return byProject;
     }
 
     private static ApiDtos.ProjectDetail detail(Project project, List<ApiDtos.TaskView> tasks) {
+        long runningCount = tasks.stream().mapToLong(ApiDtos.TaskView::runningCount).sum();
         return new ApiDtos.ProjectDetail(project.getId(), project.getName(), tasks,
                 tasks.stream().mapToLong(ApiDtos.TaskView::estimatedMinutes).sum(),
                 tasks.stream().mapToDouble(ApiDtos.TaskView::executedSeconds).sum(),
-                tasks.stream().anyMatch(ApiDtos.TaskView::working));
+                runningCount > 0, runningCount);
     }
 
     @Transactional
-    public ApiDtos.WorkSession startTask(long taskId) {
-        Employee user = employees.findLockedById(TRACKING_USER_ID)
+    public ApiDtos.WorkSession startTask(long taskId, long userId) {
+        Employee user = employees.findLockedById(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
-                        "Create user #1 in Users before starting a task"));
+                        "Select an existing user before starting a task"));
         ProjectTask task = tasks.findById(taskId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
-        ensureNoActiveTimer(TRACKING_USER_ID);
+        ensureNoActiveTimer(userId);
         Instant start = now();
         return session(entries.saveAndFlush(new TimeEntry(user, task, start)), start);
     }
 
     @Transactional(readOnly = true)
-    public ApiDtos.WorkSession activeSession() {
-        return entries.findFirstByEmployeeIdAndStoppedAtIsNull(TRACKING_USER_ID)
+    public ApiDtos.WorkSession activeSession(long userId) {
+        return entries.findFirstByEmployeeIdAndStoppedAtIsNull(userId)
                 .map(entry -> session(entry, now())).orElse(null);
     }
 
     @Transactional
-    public ApiDtos.WorkSession stopSession(long sessionId, Instant requestedStop) {
-        lockEmployee(TRACKING_USER_ID);
+    public ApiDtos.WorkSession stopSession(long sessionId, long userId, Instant requestedStop) {
+        lockEmployee(userId);
         TimeEntry entry = entries.findById(sessionId)
-                .filter(candidate -> candidate.getEmployee().getId() == TRACKING_USER_ID)
+                .filter(candidate -> candidate.getEmployee().getId() == userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Work session not found"));
         Instant stop = now();
         if (entry.getStoppedAt() == null) {

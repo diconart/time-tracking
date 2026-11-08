@@ -21,11 +21,11 @@ public final class ApiDtos {
     public record TaskCreate(@NotBlank @Size(max = 300) String description,
                              @Min(0) @Max(525600) int estimatedMinutes) { }
     public record ProjectView(long id, String name, long taskCount, long estimatedMinutes,
-                              double executedSeconds, boolean working) { }
+                              double executedSeconds, boolean working, long runningCount) { }
     public record TaskView(long id, String description, int estimatedMinutes,
-                           double executedSeconds, boolean working) { }
+                           double executedSeconds, boolean working, long runningCount) { }
     public record ProjectDetail(long id, String name, List<TaskView> tasks, long estimatedMinutes,
-                                double executedSeconds, boolean working) { }
+                                double executedSeconds, boolean working, long runningCount) { }
     public record WorkSession(long id, long userId, String userName, Long projectId,
                               String projectName, Long taskId, String description,
                               Instant startedAt, Instant stoppedAt, double durationSeconds) { }

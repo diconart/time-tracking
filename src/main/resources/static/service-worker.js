@@ -1,5 +1,5 @@
 /* Cache only static application shell. NEVER cache /api or queue timer writes. */
-const CACHE = "worktime-shell-v9";
+const CACHE = "worktime-shell-v11";
 const SHELL = [
   "/", "/index.html", "/offline.html", "/static/styles.css", "/static/app.js",
   "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"

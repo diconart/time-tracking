@@ -28,6 +28,8 @@ dialog input{width:100%;margin-top:6px}
 #dialog-error{color:#963a34}
 #estimate-field{margin-top:14px}
 .report-pagination{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:10px;margin-top:12px}
+#tracking-user{max-width:12rem;padding:6px}
+.workspace-toolbar,.topbar-actions{flex-wrap:wrap}
 @media(max-width:850px){
   .layout{display:block}
   .sidebar{display:flex;width:100%;min-width:0;flex-direction:row;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;flex-wrap:wrap}

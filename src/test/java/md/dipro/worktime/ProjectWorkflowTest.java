@@ -96,6 +96,23 @@ class ProjectWorkflowTest {
                 .andExpect(jsonPath("$.length()").value(2));
         mvc.perform(get("/api/sessions").param("userId", "2")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
+        long otherUser = id(mvc.perform(post("/api/employees").contentType(APPLICATION_JSON)
+                        .content("""
+                                {"name":"Jamie Demo"}
+                                """)).andExpect(status().isCreated()).andReturn());
+        String otherUserId = Long.toString(otherUser);
+        long otherSession = id(mvc.perform(post("/api/tasks/{id}/sessions", taskId).param("userId", otherUserId))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.user_id").value(otherUser)).andReturn());
+        mvc.perform(get("/api/sessions/active").param("userId", otherUserId)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(otherSession));
+        mvc.perform(get("/api/projects/{id}", projectId)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.running_count").value(2))
+                .andExpect(jsonPath("$.tasks[0].running_count").value(2));
+        mvc.perform(post("/api/sessions/{id}/stop", otherSession)).andExpect(status().isNotFound());
+        mvc.perform(post("/api/sessions/{id}/stop", otherSession).param("userId", otherUserId))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.user_id").value(otherUser));
+        mvc.perform(get("/api/sessions/active")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(second));
 
         byte[] file = mvc.perform(post("/api/sessions/export").contentType(APPLICATION_JSON)
                         .content("[%d,%d]".formatted(first, second)))

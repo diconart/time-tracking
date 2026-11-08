@@ -1,30 +1,76 @@
 const page = document.querySelector("#page");
 const dialog = document.querySelector("#create-dialog");
+const userPicker = document.querySelector("#tracking-user");
 const storageKey = "worktime.active-session";
+const userKey = "worktime.selected-user";
+let selectedUserId = readSelectedUser();
 let active = readTimer();
 let online = false;
 let busy = false;
 let routeVersion = 0;
 let checkingConnection = false;
 
-function readTimer() {
+function readSelectedUser() {
   try {
-    const saved = JSON.parse(localStorage.getItem(storageKey));
+    return Number(localStorage.getItem(userKey)) || 1;
+  } catch {
+    return 1;
+  }
+}
+
+function timerKey(userId) {
+  return userId === 1 ? storageKey : storageKey + "." + userId;
+}
+
+function readTimer(userId = selectedUserId) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(timerKey(userId)));
     return saved?.id && saved.started_at ? saved : null;
   } catch {
     return null;
   }
 }
 
-function saveTimer(session) {
-  active = session;
+function saveTimer(session, userId = selectedUserId) {
+  if (userId === selectedUserId) active = session;
   try {
-    if (session) localStorage.setItem(storageKey, JSON.stringify(session));
-    else localStorage.removeItem(storageKey);
+    if (session) localStorage.setItem(timerKey(userId), JSON.stringify(session));
+    else localStorage.removeItem(timerKey(userId));
   } catch {
     notify("Browser storage is unavailable. The session can still be recovered from the server.", true);
   }
   renderTimer();
+}
+
+function selectUser(userId) {
+  selectedUserId = userId;
+  active = readTimer();
+  try {
+    localStorage.setItem(userKey, String(userId));
+  } catch {
+    // The selection remains available in this tab.
+  }
+  renderTimer();
+}
+
+function updateUserPicker(users) {
+  if (!users.some(user => user.id === selectedUserId)) selectUser(users[0]?.id ?? 0);
+  const options = users.map(user => {
+    const option = element("option", user.name);
+    option.value = user.id;
+    return option;
+  });
+  if (!options.length) options.push(element("option", "No users"));
+  userPicker.replaceChildren(...options);
+  userPicker.value = selectedUserId ? String(selectedUserId) : "No users";
+  renderTimer();
+}
+
+async function restoreTimer() {
+  if (!selectedUserId || active || busy) return;
+  const userId = selectedUserId;
+  const session = await api("/sessions/active?userId=" + userId);
+  if (session && selectedUserId === userId && !active && !busy) saveTimer(session);
 }
 
 function setOnline(value) {
@@ -63,17 +109,19 @@ async function checkConnection() {
   const wasOnline = online;
   try {
     await api("/health");
-    if (active?.pending_stop_at && !busy) {
-      await stopTimer();
-      return;
+    const users = await api("/employees");
+    updateUserPicker(users);
+    let retriedStop = false;
+    for (const user of users) {
+      const session = user.id === selectedUserId ? active : readTimer(user.id);
+      if (session?.pending_stop_at && !busy) {
+        await stopTimer(session);
+        retriedStop = true;
+      }
     }
-    if (!active && !busy) {
-      const session = await api("/sessions/active");
-      if (session && !active && !busy) saveTimer(session);
-    }
+    await restoreTimer();
     if (!wasOnline) void renderRoute();
-    else if (location.hash === "#users") {
-      const users = await api("/employees");
+    else if (!retriedStop && location.hash === "#users") {
       const tasks = new Map(users.map(user => [String(user.id), user.active_task]));
       page.querySelectorAll("[data-user-activity]").forEach(cell => {
         cell.textContent = tasks.get(cell.dataset.userActivity) || "Idle";
@@ -120,9 +168,10 @@ function duration(seconds) {
 }
 
 function renderTimer() {
+  userPicker.disabled = busy || !selectedUserId || !userPicker.options.length;
   document.querySelectorAll("[data-executed]").forEach(clock => {
     const elapsed = (Date.now() - Number(clock.dataset.snapshot)) / 1000;
-    clock.textContent = duration(Number(clock.dataset.executed) + elapsed);
+    clock.textContent = duration(Number(clock.dataset.executed) + elapsed * Number(clock.dataset.runningCount));
   });
   document.querySelector("#running-timer").hidden = !active;
   document.querySelector("#timer-idle").hidden = Boolean(active);
@@ -130,7 +179,7 @@ function renderTimer() {
   document.querySelectorAll("[data-task]").forEach(control => {
     const running = active?.task_id === Number(control.dataset.task);
     control.textContent = running ? "■ Stop" : "▶ Start";
-    control.disabled = busy || (!running && (Boolean(active) || !online));
+    control.disabled = busy || (!running && (Boolean(active) || !online || !selectedUserId));
   });
   if (active) {
     document.querySelector("#timer-label").textContent =
@@ -142,11 +191,12 @@ function renderTimer() {
 }
 
 async function startTask(id) {
-  if (busy || active || !online) return;
+  if (busy || active || !online || !selectedUserId) return;
+  const userId = selectedUserId;
   busy = true;
   renderTimer();
   try {
-    saveTimer(await api("/tasks/" + id + "/sessions", "POST"));
+    saveTimer(await api("/tasks/" + id + "/sessions?userId=" + userId, "POST"), userId);
     await renderRoute();
     notify();
   } catch (error) {
@@ -157,16 +207,18 @@ async function startTask(id) {
   }
 }
 
-async function stopTimer() {
-  if (!active || busy) return;
+async function stopTimer(timer = active) {
+  if (!timer || busy) return;
   busy = true;
-  const session = { ...active, pending_stop_at: active.pending_stop_at || new Date().toISOString() };
-  saveTimer(session);
+  const userId = timer.user_id;
+  const session = { ...timer, pending_stop_at: timer.pending_stop_at || new Date().toISOString() };
+  saveTimer(session, userId);
   try {
-    const saved = await api("/sessions/" + session.id + "/stop", "POST",
+    const saved = await api("/sessions/" + session.id + "/stop?userId=" + userId, "POST",
       { stopped_at: session.pending_stop_at });
     if (saved.id !== session.id || !saved.stopped_at) throw new Error("Stop was not confirmed.");
-    if (active?.id === saved.id) saveTimer(null);
+    const current = userId === selectedUserId ? active : readTimer(userId);
+    if (current?.id === saved.id) saveTimer(null, userId);
     await renderRoute();
     notify("Work session saved.");
   } catch (error) {
@@ -301,6 +353,7 @@ function openCreate(title, label, maxLength, submit, withEstimate = false) {
 
 async function usersPage() {
   const users = await api("/employees");
+  updateUserPicker(users);
   const create = button("Add user", () => openCreate("Add user", "Name", 80,
     name => api("/employees", "POST", { name })), "primary");
   return [heading("Users", create),
@@ -308,7 +361,7 @@ async function usersPage() {
       const activity = element("span", user.active_task || "Idle");
       activity.dataset.userActivity = user.id;
       return [user.id, user.name, activity, link("Edit and view statistics", "#users/" + user.id)];
-    }), "No users yet. Create user #1 to start tracking tasks.", "Users")];
+    }), "No users yet. Add a user to start tracking tasks.", "Users")];
 }
 
 async function userPage(id) {
@@ -371,6 +424,8 @@ function timingCells(item) {
   if (item.working) {
     executed.dataset.executed = item.executed_seconds;
     executed.dataset.snapshot = Date.now();
+    // Older responses report a running timer without a session count.
+    executed.dataset.runningCount = item.running_count ?? 1;
   }
   return [duration(item.estimated_minutes * 60), executed,
     element("span", item.working ? "Working" : "Idle", item.working ? "pill" : "pill violet")];
@@ -430,6 +485,11 @@ async function reportsPage() {
     ["longest", "Longest duration"], ["shortest", "Shortest duration"],
     ["user", "User name"], ["project", "Project name"]]);
   const pageSize = select("Rows per page", [20, 50, 100, 200].map(size => [size, String(size)]));
+  const totalTime = element("p");
+  totalTime.setAttribute("role", "status");
+  const userStatistics = element("section");
+  const statisticsTable = element("div");
+  userStatistics.append(element("h2", "Time by user"), statisticsTable);
   let currentPage = 1;
   const pagination = element("nav", undefined, "report-pagination");
   pagination.setAttribute("aria-label", "Report pagination");
@@ -518,6 +578,16 @@ async function reportsPage() {
         && (!status.value || status.value === (session.stopped_at ? "completed" : "running"))
         && (!from.value || day >= from.value) && (!to.value || day <= to.value);
     }).sort(comparisons[sort.value]);
+    const totalsByUser = new Map();
+    let totalSeconds = 0;
+    for (const row of visible) {
+      totalSeconds += row.duration_seconds;
+      totalsByUser.set(row.user_id, (totalsByUser.get(row.user_id) ?? 0) + row.duration_seconds);
+    }
+    totalTime.textContent = "Total time for filtered sessions: " + duration(totalSeconds);
+    const userRows = users.filter(person => !user.value || String(person.id) === user.value)
+      .map(person => [person.name, duration(totalsByUser.get(person.id) ?? 0)]);
+    statisticsTable.replaceChildren(paginatedTable(["User", "Total time"], userRows, "No users.", "Time by user"));
     currentPage = 1;
     renderPage();
   }
@@ -541,7 +611,8 @@ async function reportsPage() {
     updateSelection();
   }
   update();
-  return [heading("Reports", exportButton), filters, results, pagination];
+  return [heading("Reports", exportButton), filters, totalTime, userStatistics,
+    element("h2", "Work sessions"), results, pagination];
 }
 
 async function renderRoute() {
@@ -569,14 +640,23 @@ async function renderRoute() {
   }
 }
 
-document.querySelector("#stop-timer").addEventListener("click", stopTimer);
+document.querySelector("#stop-timer").addEventListener("click", () => stopTimer());
+userPicker.addEventListener("change", async () => {
+  selectUser(Number(userPicker.value));
+  notify();
+  try {
+    if (online) await restoreTimer();
+  } catch (error) {
+    notify(error.message, true);
+  }
+});
 document.querySelector("#cancel-dialog").addEventListener("click", () => dialog.close());
 window.addEventListener("hashchange", () => {
   notify();
   void renderRoute();
 });
 window.addEventListener("storage", event => {
-  if (event.key === storageKey) {
+  if (event.key === timerKey(selectedUserId)) {
     active = readTimer();
     renderTimer();
     if (!location.hash || location.hash.startsWith("#projects")) void renderRoute();

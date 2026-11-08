@@ -37,14 +37,19 @@ public class ProjectController {
 
     @PostMapping("/tasks/{id}/sessions")
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiDtos.WorkSession start(@PathVariable long id) { return service.startTask(id); }
+    public ApiDtos.WorkSession start(@PathVariable long id, @RequestParam(defaultValue = "1") long userId) {
+        return service.startTask(id, userId);
+    }
 
     @GetMapping("/sessions/active")
-    public Optional<ApiDtos.WorkSession> active() { return Optional.ofNullable(service.activeSession()); }
+    public Optional<ApiDtos.WorkSession> active(@RequestParam(defaultValue = "1") long userId) {
+        return Optional.ofNullable(service.activeSession(userId));
+    }
 
     @PostMapping("/sessions/{id}/stop")
-    public ApiDtos.WorkSession stop(@PathVariable long id, @RequestBody(required = false) ApiDtos.SessionStop input) {
-        return service.stopSession(id, input == null ? null : input.stoppedAt());
+    public ApiDtos.WorkSession stop(@PathVariable long id, @RequestParam(defaultValue = "1") long userId,
+                                   @RequestBody(required = false) ApiDtos.SessionStop input) {
+        return service.stopSession(id, userId, input == null ? null : input.stoppedAt());
     }
 
     @GetMapping("/sessions")
